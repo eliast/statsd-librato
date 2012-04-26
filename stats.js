@@ -16,6 +16,15 @@ config.configFile(process.argv[2], function (config, oldConfig) {
     debugInt = false;
   }
 
+  var splitKey = function(k) {
+    var keyParts = k.split("#");
+    if(keyParts.length === 2) {
+        return keyParts;
+    } else {
+        return [null, k];
+    }
+  }
+
   if (config.debug) {
     if (debugInt !== undefined) { clearInterval(debugInt); }
     debugInt = setInterval(function () { 
@@ -27,15 +36,16 @@ config.configFile(process.argv[2], function (config, oldConfig) {
     server = dgram.createSocket('udp4', function (msg, rinfo) {
       if (config.dumpMessages) { sys.log(msg.toString()); }
       var bits = msg.toString().split(':');
-      var key = bits.shift()
+      var parts = splitKey(bits.shift());
+      var key = parts[1];
+      var key = key
                     .replace(/\s+/g, '_')
                     .replace(/\.\//g, '-')
-                    .replace(/[^a-zA-Z_\-0-9]/g, '');
-
+                    .replace(/[^a-zA-Z_\-0-9#]/g, '');
       if (bits.length == 0) {
         bits.push("1");
       }
-
+      key = parts[0] + "#" + key;
       for (var i = 0; i < bits.length; i++) {
         var sampleRate = 1;
         var fields = bits[i].split("|");
@@ -74,10 +84,14 @@ config.configFile(process.argv[2], function (config, oldConfig) {
 
       for (key in counters) {
         var value = counters[key] / (flushInterval / 1000);
+        counters[key] = 0;
+        var parts = splitKey(key);
+        var key = parts[1];
         stats["counters"][key] = {};
         stats["counters"][key]["value"] = value;
-
-        counters[key] = 0;
+        if(parts[0]) {
+            stats["counters"][key]["source"] = parts[0];
+        }
 
         numStats += 1;
       }
@@ -97,12 +111,20 @@ config.configFile(process.argv[2], function (config, oldConfig) {
           }
 
           timers[key] = [];
+
+          var parts = splitKey(key);
+          source = parts[0];
+          key = parts[1];
+
           stats["gauges"][key] = {};
           stats["gauges"][key]["count"] = count;
           stats["gauges"][key]["sum_squares"] = sumOfSquares;
           stats["gauges"][key]["sum"] = sum;
           stats["gauges"][key]["min"] = min;
           stats["gauges"][key]["max"] = max;
+          if(source) {
+            stats["gauges"][key]["source"] = source;
+          }
 
           numStats += 1;
         }
